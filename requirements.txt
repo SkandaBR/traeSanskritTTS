@@ -1,0 +1,41 @@
+# Deep Learning Frameworks
+torch>=1.12.0
+torchaudio>=0.12.0
+tensorflow>=2.8.0
+
+# Audio Processing
+librosa>=0.9.2
+scipy>=1.8.0
+soundfile>=0.10.3
+
+# Numerical Computing
+numpy>=1.21.0
+pandas>=1.4.0
+
+# Text Processing
+regex>=2022.3.15
+unicodedata2>=14.0.0
+indic-transliteration>=2.3.0
+
+# Machine Learning Utilities
+scikit-learn>=1.1.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+tqdm>=4.64.0
+
+# Configuration and Logging
+pyyaml>=6.0
+loguru>=0.6.0
+
+# Audio Visualization
+matplotlib>=3.5.0
+librosa[display]>=0.9.2
+
+# Model Serving (Optional)
+flask>=2.1.0
+fastapi>=0.75.0
+uvicorn>=0.17.0
+
+# Development Tools
+jupyter>=1.0.0
+ipython>=8.0.0

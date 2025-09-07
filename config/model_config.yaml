@@ -1,0 +1,97 @@
+# Sanskrit TTS Model Configuration
+
+# Tacotron 2 Configuration
+tacotron2:
+  # Text processing
+  n_symbols: 150
+  symbols_embedding_dim: 512
+  
+  # Encoder
+  encoder_kernel_size: 5
+  encoder_n_convolutions: 3
+  encoder_embedding_dim: 512
+  
+  # Attention
+  attention_rnn_dim: 1024
+  attention_dim: 128
+  attention_location_n_filters: 32
+  attention_location_kernel_size: 31
+  
+  # Decoder
+  n_frames_per_step: 1
+  decoder_rnn_dim: 1024
+  prenet_dim: 256
+  max_decoder_steps: 1000
+  gate_threshold: 0.5
+  p_attention_dropout: 0.1
+  p_decoder_dropout: 0.1
+  
+  # Postnet
+  postnet_embedding_dim: 512
+  postnet_kernel_size: 5
+  postnet_n_convolutions: 5
+  
+  # Mel-spectrogram
+  n_mel_channels: 80
+  
+  # Training
+  mask_padding: true
+  fp16_run: false
+
+# HiFi-GAN Configuration
+hifigan:
+  # Generator
+  resblock: "1"
+  upsample_rates: [8, 8, 2, 2]
+  upsample_kernel_sizes: [16, 16, 4, 4]
+  upsample_initial_channel: 512
+  resblock_kernel_sizes: [3, 7, 11]
+  resblock_dilation_sizes: [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+  
+  # Audio processing
+  segment_size: 8192
+  num_mels: 80
+  num_freq: 1025
+  n_fft: 1024
+  hop_size: 256
+  win_size: 1024
+  sampling_rate: 22050
+  fmin: 0
+  fmax: 8000
+  fmax_for_loss: null
+  
+  # Training
+  batch_size: 16
+  learning_rate: 0.0002
+  adam_b1: 0.8
+  adam_b2: 0.99
+  lr_decay: 0.999
+  seed: 1234
+
+# Data Configuration
+data:
+  training_files: "data/train_filelist.txt"
+  validation_files: "data/val_filelist.txt"
+  text_cleaners: ["sanskrit_cleaners"]
+  
+# Training Configuration
+training:
+  epochs: 1000
+  iters_per_checkpoint: 1000
+  batch_size: 32
+  learning_rate: 1e-3
+  weight_decay: 1e-6
+  grad_clip_thresh: 1.0
+  
+  # Distributed training
+  distributed_run: false
+  dist_backend: "nccl"
+  dist_url: "tcp://localhost:54321"
+  
+  # Mixed precision
+  fp16_run: false
+  dynamic_loss_scaling: true
+  
+  # CUDA
+  cudnn_enabled: true
+  cudnn_benchmark: false
