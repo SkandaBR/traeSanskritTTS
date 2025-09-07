@@ -192,8 +192,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ```bash
 # Create and activate virtual environment
 python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # macOS/Linux
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+# source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt

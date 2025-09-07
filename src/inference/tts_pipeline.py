@@ -21,26 +21,22 @@ class SanskritTTSPipeline:
                  tacotron2_checkpoint: str,
                  hifigan_checkpoint: str,
                  device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
-        """
-        Initialize the TTS pipeline.
-        
-        Args:
-            tacotron2_checkpoint: Path to Tacotron 2 model checkpoint
-            hifigan_checkpoint: Path to HiFi-GAN model checkpoint
-            device: Device to run inference on
-        """
         self.device = device
+        
+        # Check if checkpoints exist before proceeding
+        if not os.path.exists(tacotron2_checkpoint):
+            raise FileNotFoundError(f"Tacotron2 checkpoint not found: {tacotron2_checkpoint}")
+        if not os.path.exists(hifigan_checkpoint):
+            raise FileNotFoundError(f"HiFi-GAN checkpoint not found: {hifigan_checkpoint}")
         
         # Initialize text processing components
         self.text_normalizer = SanskritTextNormalizer()
         self.g2p_converter = SanskritG2PConverter()
+        self.phoneme_to_id = self._create_phoneme_mapping()
         
         # Load models
         self.tacotron2 = self._load_tacotron2(tacotron2_checkpoint)
         self.hifigan = self._load_hifigan(hifigan_checkpoint)
-        
-        # Create phoneme to index mapping
-        self.phoneme_to_id = self._create_phoneme_mapping()
         
         print(f"Sanskrit TTS Pipeline initialized on {device}")
     
@@ -48,58 +44,61 @@ class SanskritTTSPipeline:
         """Load Tacotron 2 model from checkpoint."""
         # Create model configuration (you may want to load this from a config file)
         class HParams:
-            def __init__(self):
-                self.n_symbols = 150  # Adjust based on your phoneme set
-                self.symbols_embedding_dim = 512
-                self.encoder_kernel_size = 5
-                self.encoder_n_convolutions = 3
-                self.encoder_embedding_dim = 512
-                self.attention_rnn_dim = 1024
-                self.attention_dim = 128
-                self.attention_location_n_filters = 32
-                self.attention_location_kernel_size = 31
-                self.n_frames_per_step = 1
-                self.decoder_rnn_dim = 1024
-                self.prenet_dim = 256
-                self.max_decoder_steps = 1000
-                self.gate_threshold = 0.5
-                self.p_attention_dropout = 0.1
-                self.p_decoder_dropout = 0.1
-                self.postnet_embedding_dim = 512
-                self.postnet_kernel_size = 5
-                self.postnet_n_convolutions = 5
-                self.n_mel_channels = 80
-                self.mask_padding = True
-                self.fp16_run = False
+            # Model hyperparameters
+            n_symbols = 50  # Adjust based on your phoneme set
+            symbols_embedding_dim = 512
+            encoder_kernel_size = 5
+            encoder_n_convolutions = 3
+            encoder_embedding_dim = 512
+            attention_rnn_dim = 1024
+            attention_dim = 128
+            attention_location_n_filters = 32
+            attention_location_kernel_size = 31
+            n_mel_channels = 80
+            n_frames_per_step = 1
+            decoder_rnn_dim = 1024
+            prenet_dim = 256
+            max_decoder_steps = 1000
+            gate_threshold = 0.5
+            p_attention_dropout = 0.1
+            p_decoder_dropout = 0.1
+            postnet_embedding_dim = 512
+            postnet_kernel_size = 5
+            postnet_n_convolutions = 5
+            mask_padding = True
+            fp16_run = False
         
         hparams = HParams()
-        model = Tacotron2(hparams).to(self.device)
+        model = Tacotron2(hparams)
         
+        # Check if checkpoint exists
         if os.path.exists(checkpoint_path):
+            print(f"Loading Tacotron2 checkpoint from {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             model.load_state_dict(checkpoint['state_dict'])
-            print(f"Loaded Tacotron 2 from {checkpoint_path}")
         else:
-            print(f"Warning: Tacotron 2 checkpoint not found at {checkpoint_path}")
-            print("Using randomly initialized model")
+            print(f"WARNING: Checkpoint {checkpoint_path} not found! Using untrained model.")
+            print("This will produce noise/buzzing instead of speech.")
         
+        model.to(self.device)
         model.eval()
         return model
     
     def _load_hifigan(self, checkpoint_path: str) -> Generator:
         """Load HiFi-GAN model from checkpoint."""
         config = HiFiGANConfig()
-        model = Generator(config).to(self.device)
+        model = Generator(config)
         
+        # Check if checkpoint exists
         if os.path.exists(checkpoint_path):
+            print(f"Loading HiFi-GAN checkpoint from {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             model.load_state_dict(checkpoint['generator'])
-            model.remove_weight_norm()
-            print(f"Loaded HiFi-GAN from {checkpoint_path}")
         else:
-            print(f"Warning: HiFi-GAN checkpoint not found at {checkpoint_path}")
-            print("Using randomly initialized model")
+            print(f"WARNING: Checkpoint {checkpoint_path} not found! Using untrained model.")
+            print("This will produce noise/buzzing instead of speech.")
         
+        model.to(self.device)
         model.eval()
         return model
     
@@ -128,20 +127,31 @@ class SanskritTTSPipeline:
         """Convert text to phoneme sequence tensor."""
         # Normalize text
         normalized_text = self.text_normalizer.normalize(text)
+        print(f"DEBUG: Normalized text: '{normalized_text}'")
         
         # Convert to phonemes
         phonemes = self.g2p_converter.convert(normalized_text)
+        print(f"DEBUG: Generated phonemes: {phonemes}")
         
         # Convert phonemes to indices
         sequence = [self.phoneme_to_id.get('SOS', 1)]  # Start token
+        skipped_phonemes = []
+        
         for phoneme in phonemes:
             if phoneme in self.phoneme_to_id:
                 sequence.append(self.phoneme_to_id[phoneme])
             else:
                 # Handle unknown phonemes
+                skipped_phonemes.append(phoneme)
                 print(f"Warning: Unknown phoneme '{phoneme}', skipping")
+        
         sequence.append(self.phoneme_to_id.get('EOS', 2))  # End token
         
+        if skipped_phonemes:
+            print(f"DEBUG: Skipped phonemes: {skipped_phonemes}")
+            print(f"DEBUG: Available phonemes: {list(self.phoneme_to_id.keys())}")
+        
+        print(f"DEBUG: Final sequence length: {len(sequence)}")
         return torch.LongTensor(sequence).unsqueeze(0).to(self.device)
     
     def synthesize(self, text: str, output_path: Optional[str] = None) -> Tuple[np.ndarray, int]:
@@ -155,19 +165,54 @@ class SanskritTTSPipeline:
         Returns:
             Tuple of (audio_array, sample_rate)
         """
+        print(f"DEBUG: Input text: '{text}'")
+        
         with torch.no_grad():
             # Convert text to phoneme sequence
             sequence = self._text_to_sequence(text)
+            print(f"DEBUG: Input sequence shape: {sequence.shape}")
+            print(f"DEBUG: Input sequence: {sequence}")
+            
+            # Check if sequence is too short (only SOS + EOS tokens)
+            if sequence.shape[1] <= 2:
+                print("WARNING: Input sequence is too short (only start/end tokens)")
+                print("This suggests phoneme mapping issues")
             
             # Generate mel-spectrogram using Tacotron 2
             mel_outputs, mel_outputs_postnet, gate_outputs, alignments = self.tacotron2.inference(sequence)
+            print(f"DEBUG: Mel spectrogram shape: {mel_outputs_postnet.shape}")
+            print(f"DEBUG: Mel spectrogram stats - min: {mel_outputs_postnet.min():.3f}, max: {mel_outputs_postnet.max():.3f}, mean: {mel_outputs_postnet.mean():.3f}")
+            
+            # Check for suspicious mel-spectrogram values
+            if torch.isnan(mel_outputs_postnet).any():
+                print("ERROR: Mel-spectrogram contains NaN values!")
+            if torch.isinf(mel_outputs_postnet).any():
+                print("ERROR: Mel-spectrogram contains infinite values!")
             
             # Generate audio using HiFi-GAN
             audio = self.hifigan(mel_outputs_postnet)
             audio = audio.squeeze().cpu().numpy()
+            print(f"DEBUG: Raw audio shape: {audio.shape}")
+            print(f"DEBUG: Audio stats - min: {audio.min():.6f}, max: {audio.max():.6f}, mean: {audio.mean():.6f}")
+            print(f"DEBUG: Audio duration: {len(audio) / 22050:.3f} seconds")
+            
+            # Check for audio quality issues
+            if np.isnan(audio).any():
+                print("ERROR: Audio contains NaN values!")
+            if np.isinf(audio).any():
+                print("ERROR: Audio contains infinite values!")
+            
+            # Check if audio is just noise (high frequency content)
+            audio_std = np.std(audio)
+            if audio_std > 0.5:
+                print(f"WARNING: Audio has high variance ({audio_std:.3f}) - likely noise/buzzing")
+                print("This suggests untrained models are being used")
             
             # Normalize audio
-            audio = audio / np.max(np.abs(audio))
+            if np.max(np.abs(audio)) > 0:
+                audio = audio / np.max(np.abs(audio))
+            else:
+                print("WARNING: Audio contains only zeros!")
             
             # Sample rate from HiFi-GAN config
             sample_rate = 22050

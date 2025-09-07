@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.nn import Parameter
 import numpy as np
 from typing import Tuple, Optional
+from math import sqrt
 
 class LinearNorm(nn.Module):
     """Linear layer with Xavier initialization."""
@@ -351,10 +352,36 @@ class Tacotron2(nn.Module):
         std = sqrt(2.0 / (hparams.n_symbols + hparams.symbols_embedding_dim))
         val = sqrt(3.0) * std  # uniform bounds for std
         self.embedding.weight.data.uniform_(-val, val)
-        self.encoder = Encoder(hparams)
-        self.decoder = Decoder(hparams)
-        self.postnet = Postnet(hparams)
-    
+        
+        # Fix: Pass individual parameters instead of hparams object
+        self.encoder = Encoder(
+            hparams.encoder_n_convolutions,
+            hparams.symbols_embedding_dim,  # encoder_embedding_dim
+            hparams.encoder_kernel_size
+        )
+        
+        self.decoder = Decoder(
+            hparams.n_mel_channels,
+            hparams.n_frames_per_step,
+            hparams.symbols_embedding_dim,  # encoder_embedding_dim
+            hparams.attention_dim,
+            hparams.attention_rnn_dim,
+            hparams.decoder_rnn_dim,
+            hparams.prenet_dim,
+            hparams.max_decoder_steps,
+            hparams.gate_threshold,
+            hparams.p_attention_dropout,
+            hparams.p_decoder_dropout,
+            hparams.attention_location_n_filters,
+            hparams.attention_location_kernel_size
+        )
+        
+        self.postnet = Postnet(
+            hparams.n_mel_channels,
+            hparams.postnet_embedding_dim,
+            hparams.postnet_kernel_size,
+            hparams.postnet_n_convolutions
+        )
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, output_lengths = batch
         text_padded = to_gpu(text_padded).long()
